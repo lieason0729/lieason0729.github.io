@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>水位上升模擬器 (o711 裝飲料)</title>
+    <style>
+        body {
+            font-family: "Microsoft JhengHei", sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f0f8ff;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            max-width: 600px;
+            width: 100%;
+        }
+        .input-group {
+            margin-bottom: 15px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input { width: 90%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+        
+        button {
+            width: 100%;
+            padding: 10px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+        button:hover { background-color: #0056b3; }
+        
+        #visual-area {
+            margin-top: 30px;
+            height: 400px;
+            display: flex;
+            flex-direction: column-reverse;
+            align-items: center;
+            position: relative;
+            border-bottom: 5px solid #333;
+            width: 100%;
+        }
+        
+        /* 杯子樣式 */
+        .cup-section {
+            border: 2px solid #333;
+            border-bottom: none;
+            position: relative;
+            overflow: hidden;
+            transition: width 0.3s, height 0.3s;
+        }
+        
+        /* 水流樣式 */
+        .water {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background-color: rgba(0, 191, 255, 0.7);
+            transition: height 0.5s ease-out;
+        }
+
+        .info {
+            margin-top: 20px;
+            padding: 10px;
+            background: #e9ecef;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>o711 水位上升模擬器</h2>
+    <p>根據題目設定，杯子由上下兩個不同底面積的長方體組成 [1]。</p>
+    
+    <div class="input-group">
+        <div>
+            <label>下層底面寬 (w1)</label>
+            <input type="number" id="w1" value="10" min="1">
+        </div>
+        <div>
+            <label>下層高度 (h1)</label>
+            <input type="number" id="h1" value="10" min="1">
+        </div>
+        <div>
+            <label>上層底面寬 (w2)</label>
+            <input type="number" id="w2" value="5" min="1">
+        </div>
+        <div>
+            <label>上層高度 (h2)</label>
+            <input type="number" id="h2" value="10" min="1">
+        </div>
+    </div>
+
+    <div style="border-top: 1px solid #eee; padding-top: 15px;">
+        <label>每次倒入體積 (v)</label>
+        <input type="number" id="volInput" placeholder="輸入體積，例如 100" min="1">
+        <button onclick="pourWater()">倒飲料！</button>
+        <button onclick="resetCup()" style="background-color: #6c757d;">重置杯子</button>
+    </div>
+
+    <div class="info">
+        <div>當前總水位高度：<span id="currentH">0</span> cm</div>
+        <div>本次上升高度：<span id="deltaH">0</span> cm</div>
+        <div>最大上升紀錄：<span id="maxDeltaH">0</span> cm</div>
+    </div>
+
+    <div id="visual-area">
+        <!-- 下層杯子 -->
+        <div id="bottomCup" class="cup-section">
+            <div id="bottomWater" class="water"></div>
+        </div>
+        <!-- 上層杯子 -->
+        <div id="topCup" class="cup-section">
+            <div id="topWater" class="water"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let currentTotalVol = 0;
+    let currentTotalH = 0;
+    let maxDeltaH = 0;
+
+    function pourWater() {
+        const w1 = parseFloat(document.getElementById('w1').value);
+        const w2 = parseFloat(document.getElementById('w2').value);
+        const h1 = parseFloat(document.getElementById('h1').value);
+        const h2 = parseFloat(document.getElementById('h2').value);
+        const v = parseFloat(document.getElementById('volInput').value);
+
+        if (isNaN(v) || v <= 0) return;
+
+        const area1 = w1 * w1;
+        const area2 = w2 * w2;
+        const vol1 = area1 * h1;
+        const vol2 = area2 * h2;
+        const maxVol = vol1 + vol2;
+
+        let oldH = currentTotalH;
+        
+        // 更新體積，最高不超過杯子容量 [1]
+        currentTotalVol = Math.min(currentTotalVol + v, maxVol);
+
+        // 計算新高度
+        let newH = 0;
+        if (currentTotalVol <= vol1) {
+            newH = currentTotalVol / area1;
+        } else {
+            newH = h1 + (currentTotalVol - vol1) / area2;
+        }
+
+        let deltaH = newH - oldH;
+        currentTotalH = newH;
+        
+        if (deltaH > maxDeltaH) maxDeltaH = deltaH;
+
+        updateUI(w1, w2, h1, h2, deltaH);
+    }
+
+    function updateUI(w1, w2, h1, h2, deltaH) {
+        const scale = 10; // 繪圖縮放比例
+        
+        const bottomCup = document.getElementById('bottomCup');
+        const topCup = document.getElementById('topCup');
+        const bottomWater = document.getElementById('bottomWater');
+        const topWater = document.getElementById('topWater');
+
+        // 更新杯子外觀
+        bottomCup.style.width = (w1 * scale) + 'px';
+        bottomCup.style.height = (h1 * scale) + 'px';
+        topCup.style.width = (w2 * scale) + 'px';
+        topCup.style.height = (h2 * scale) + 'px';
+
+        // 更新水位視覺
+        if (currentTotalH <= h1) {
+            bottomWater.style.height = (currentTotalH * scale) + 'px';
+            topWater.style.height = '0px';
+        } else {
+            bottomWater.style.height = '100%';
+            topWater.style.height = ((currentTotalH - h1) * scale) + 'px';
+        }
+
+        // 更新數據顯示
+        document.getElementById('currentH').innerText = currentTotalH.toFixed(2);
+        document.getElementById('deltaH').innerText = deltaH.toFixed(2);
+        document.getElementById('maxDeltaH').innerText = maxDeltaH.toFixed(2);
+    }
+
+    function resetCup() {
+        currentTotalVol = 0;
+        currentTotalH = 0;
+        maxDeltaH = 0;
+        document.getElementById('currentH').innerText = '0';
+        document.getElementById('deltaH').innerText = '0';
+        document.getElementById('maxDeltaH').innerText = '0';
+        document.getElementById('bottomWater').style.height = '0px';
+        document.getElementById('topWater').style.height = '0px';
+        document.getElementById('volInput').value = '';
+    }
+
+    // 初始渲染
+    window.onload = () => updateUI(10, 5, 10, 10, 0);
+</script>
+
+</body>
+</html>
